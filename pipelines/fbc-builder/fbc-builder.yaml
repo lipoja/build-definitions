@@ -153,6 +153,31 @@ spec:
       - name: PLATFORM
         value:
         - $(params.build-platforms)
+  - name: fbc-generate-catalog
+    params:
+    - name: input
+      value: $(params.prefetch-input)
+    - name: SOURCE_ARTIFACT
+      value: $(tasks.clone-repository.results.SOURCE_ARTIFACT)
+    - name: ociStorage
+      value: $(params.output-image).prefetch
+    - name: ociArtifactExpiresAfter
+      value: $(params.image-expires-after)
+    runAfter:
+    - clone-repository
+    taskRef:
+      name: fbc-generate-catalog-oci-ta
+      version: "0.1"
+    workspaces:
+    - name: git-basic-auth
+      workspace: git-auth
+    - name: netrc
+      workspace: netrc
+  - matrix:
+      params:
+      - name: PLATFORM
+        value:
+        - $(params.build-platforms)
     name: build-images
     params:
     - name: IMAGE
@@ -175,13 +200,13 @@ spec:
     - name: BUILD_ARGS_FILE
       value: $(params.build-args-file)
     - name: SOURCE_ARTIFACT
-      value: $(tasks.prefetch-dependencies.results.SOURCE_ARTIFACT)
+      value: $(tasks.fbc-generate-catalog.results.SOURCE_CATALOG_ARTIFACT)
     - name: CACHI2_ARTIFACT
       value: $(tasks.prefetch-dependencies.results.CACHI2_ARTIFACT)
     - name: IMAGE_APPEND_PLATFORM
       value: "true"
     runAfter:
-    - clone-repository
+    - fbc-generate-catalog
     taskRef:
       name: buildah-remote-oci-ta
       version: "0.4"
