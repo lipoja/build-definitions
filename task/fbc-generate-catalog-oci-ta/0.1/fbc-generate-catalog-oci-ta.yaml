@@ -15,9 +15,9 @@ spec:
       description: The Trusted Artifact URI pointing to the artifact with
         the application source code.
       type: string
-    - name: ociStorage
-      description: The OCI repository where the Trusted Artifacts are stored.
-      type: string
+#    - name: ociStorage
+#      description: The OCI repository where the Trusted Artifacts are stored.
+#      type: string
   results:
     - name: SOURCE_CATALOG_ARTIFACT
       description: The Trusted Artifact URI pointing to the artifact with 
@@ -38,10 +38,10 @@ spec:
     - name: fbc-generate-catalog
       image: quay.io/redhat-appstudio/konflux-test:v1.4.23@sha256:e451a01a24824fbac8c3a667924337f67153a5bdaa68001410183bbac37e000f
       env:
-        - name: IMAGE_URL
-          value: $(params.image-url)
-        - name: IMAGE_DIGEST
-          value: $(params.image-digest)
+#        - name: IMAGE_URL
+#          value: $(params.image-url)
+#        - name: IMAGE_DIGEST
+#          value: $(params.image-digest)
         - name: SOURCE_CODE_DIR
           value: /var/workdir
       script: |
@@ -53,26 +53,26 @@ spec:
         echo "fbc-generate-catalog - test run" >/var/workdir/source/fbc-generate-catalog-test.txt
       computeResources:
         limits:
-          memory: 8Gi
+          memory: 2Gi
         requests:
           cpu: 500m
-          memory: 8Gi
-    - name: create-trusted-artifact
-      image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:edd8e3affc389320b15b9de8a5aedbf7b0463211b77c981563a2cfa20076b0c0
-      args:
-        - create
-        - --store
-        - $(params.ociStorage)
-        - $(results.SOURCE_CATALOG_ARTIFACT.path)=/var/workdir/source
-      volumeMounts:
-        - mountPath: /var/workdir
-          name: workdir
-      env:
-        - name: IMAGE_EXPIRES_AFTER
-          value: $(params.ociArtifactExpiresAfter)
-      computeResources:
-        limits:
-          memory: 3Gi
-        requests:
-          cpu: "1"
-          memory: 3Gi
+          memory: 2Gi
+#    - name: create-trusted-artifact
+#      image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:edd8e3affc389320b15b9de8a5aedbf7b0463211b77c981563a2cfa20076b0c0
+#      args:
+#        - create
+#        - --store
+#        - $(params.ociStorage)
+#        - $(results.SOURCE_CATALOG_ARTIFACT.path)=/var/workdir/source
+#      volumeMounts:
+#        - mountPath: /var/workdir
+#          name: workdir
+#      env:
+#        - name: IMAGE_EXPIRES_AFTER
+#          value: $(params.ociArtifactExpiresAfter)
+#      computeResources:
+#        limits:
+#          memory: 3Gi
+#        requests:
+#          cpu: "1"
+#          memory: 3Gi
