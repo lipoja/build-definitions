@@ -57,22 +57,22 @@ spec:
         requests:
           cpu: 500m
           memory: 2Gi
-#    - name: create-trusted-artifact
-#      image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:edd8e3affc389320b15b9de8a5aedbf7b0463211b77c981563a2cfa20076b0c0
-#      args:
-#        - create
-#        - --store
-#        - $(params.ociStorage)
-#        - $(results.SOURCE_CATALOG_ARTIFACT.path)=/var/workdir/source
-#      volumeMounts:
-#        - mountPath: /var/workdir
-#          name: workdir
-#      env:
-#        - name: IMAGE_EXPIRES_AFTER
-#          value: $(params.ociArtifactExpiresAfter)
-#      computeResources:
-#        limits:
-#          memory: 3Gi
-#        requests:
-#          cpu: "1"
-#          memory: 3Gi
+    - name: create-trusted-artifact
+      image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:edd8e3affc389320b15b9de8a5aedbf7b0463211b77c981563a2cfa20076b0c0
+      args:
+        - create
+        - --store
+        - $(params.ociStorage)
+        - $(results.SOURCE_ARTIFACT.path)=/var/workdir/source
+      volumeMounts:
+        - mountPath: /var/workdir
+          name: workdir
+      env:
+        - name: IMAGE_EXPIRES_AFTER
+          value: $(params.ociArtifactExpiresAfter)
+      computeResources:
+        limits:
+          memory: 3Gi
+        requests:
+          cpu: "1"
+          memory: 3Gi
