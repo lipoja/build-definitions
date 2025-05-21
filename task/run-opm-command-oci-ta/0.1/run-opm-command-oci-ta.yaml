@@ -19,7 +19,7 @@ spec:
       description: The OCI repository where the Trusted Artifacts are stored.
       type: string
   results:
-    - name: SOURCE_CATALOG_ARTIFACT
+    - name: SOURCE_ARTIFACT
       description: The Trusted Artifact URI pointing to the artifact with 
         the application source code with generated file-based catalog from catalog-template.yml.
   volumes:
@@ -67,9 +67,6 @@ spec:
       volumeMounts:
         - mountPath: /var/workdir
           name: workdir
-#      env:
-#        - name: IMAGE_EXPIRES_AFTER
-#          value: $(params.ociArtifactExpiresAfter)
       computeResources:
         limits:
           memory: 3Gi
