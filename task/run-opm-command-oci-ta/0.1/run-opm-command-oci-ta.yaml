@@ -18,9 +18,6 @@ spec:
     - name: ociStorage
       description: The OCI repository where the Trusted Artifacts are stored.
       type: string
-    - name: ociArtifactExpiresAfter
-      description: Expiration date for the trusted artifacts created in the
-        OCI repository. An empty string means the artifacts do not expire.
   results:
     - name: SOURCE_CATALOG_ARTIFACT
       description: The Trusted Artifact URI pointing to the artifact with 
@@ -70,9 +67,9 @@ spec:
       volumeMounts:
         - mountPath: /var/workdir
           name: workdir
-      env:
-        - name: IMAGE_EXPIRES_AFTER
-          value: $(params.ociArtifactExpiresAfter)
+#      env:
+#        - name: IMAGE_EXPIRES_AFTER
+#          value: $(params.ociArtifactExpiresAfter)
       computeResources:
         limits:
           memory: 3Gi
