@@ -50,7 +50,7 @@ spec:
         # shellcheck source=/dev/null
         . /utils.sh
         
-        echo "run-opm-command - test run" >/var/workdir/source/run-opm-command-test.txt
+        echo "run-opm-command - test run :]" >/var/workdir/source/run-opm-command-test.txt
       computeResources:
         limits:
           memory: 2Gi
