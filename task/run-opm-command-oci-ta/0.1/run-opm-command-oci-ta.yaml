@@ -49,7 +49,6 @@ spec:
         #!/usr/bin/env bash
         set -euo pipefail
         # shellcheck source=/dev/null
-        . /utils.sh
         
         echo "run-opm-command - test run :]" >/var/workdir/source/run-opm-command-test.txt
       computeResources:
