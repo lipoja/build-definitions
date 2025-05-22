@@ -36,7 +36,8 @@ spec:
         - use
         - $(params.SOURCE_ARTIFACT)=/var/workdir/source
     - name: run-opm-command
-      image: quay.io/redhat-appstudio/konflux-test:v1.4.23@sha256:e451a01a24824fbac8c3a667924337f67153a5bdaa68001410183bbac37e000f
+      # image should be the latest GA
+      image: registry.redhat.io/openshift4/ose-operator-registry-rhel9:v4.18
       env:
 #        - name: IMAGE_URL
 #          value: $(params.image-url)
