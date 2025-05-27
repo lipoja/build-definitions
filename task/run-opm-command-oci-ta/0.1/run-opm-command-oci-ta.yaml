@@ -27,30 +27,30 @@ spec:
       emptyDir: {}
   stepTemplate:
     volumeMounts:
-      - mountPath: /tmp/workdir
+      - mountPath: /var/workdir
         name: workdir
   steps:
     - name: use-trusted-artifact
       image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:635a890e9f0211b4eb5b8c811d6f06b3ed9ff7da952ebad236fbfe52ba36dbf7
       args:
         - use
-        - $(params.SOURCE_ARTIFACT)=/tmp/workdir/source
+        - $(params.SOURCE_ARTIFACT)=/var/workdir/source
     - name: run-opm-command
       # image should be the latest GA
-      image: registry.redhat.io/openshift4/ose-operator-registry-rhel9:v4.18
+      image: quay.io/konflux-ci/tools:latest@sha256:bad876073dbbe8a7c8ecf818f86d252046dbe4b7fb9413810adcee29f6269d1b
       env:
 #        - name: IMAGE_URL
 #          value: $(params.image-url)
 #        - name: IMAGE_DIGEST
 #          value: $(params.image-digest)
         - name: SOURCE_CODE_DIR
-          value: /tmp/workdir
+          value: /var/workdir
       script: |
         #!/usr/bin/env bash
         set -euo pipefail
         # shellcheck source=/dev/null
         
-        opm version > /tmp/workdir/source/run-opm-command-test.txt
+        echo "run-opm-command - test run :]" >/var/workdir/source/run-opm-command-test.txt
       computeResources:
         limits:
           memory: 2Gi
@@ -63,9 +63,9 @@ spec:
         - create
         - --store
         - $(params.ociStorage)
-        - $(results.SOURCE_ARTIFACT.path)=/tmp/workdir/source
+        - $(results.SOURCE_ARTIFACT.path)=/var/workdir/source
       volumeMounts:
-        - mountPath: /tmp/workdir
+        - mountPath: /var/workdir
           name: workdir
       computeResources:
         limits:
