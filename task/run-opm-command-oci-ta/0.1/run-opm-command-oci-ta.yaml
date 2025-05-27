@@ -37,7 +37,7 @@ spec:
         - $(params.SOURCE_ARTIFACT)=/var/workdir/source
     - name: run-opm-command
       # image should be the latest GA
-      image: quay.io/konflux-ci/tools:latest@sha256:bad876073dbbe8a7c8ecf818f86d252046dbe4b7fb9413810adcee29f6269d1b
+      image: quay.io/konflux-ci/konflux-test:v1.4.23@sha256:e451a01a24824fbac8c3a667924337f67153a5bdaa68001410183bbac37e000f
       env:
 #        - name: IMAGE_URL
 #          value: $(params.image-url)
