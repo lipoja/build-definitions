@@ -46,6 +46,9 @@ spec:
 #          value: $(params.image-digest)
         - name: SOURCE_CODE_DIR
           value: /var/workdir
+      volumeMounts:
+        - mountPath: /var/workdir
+          name: workdir
       script: |
         #!/usr/bin/env bash
         set -euo pipefail
