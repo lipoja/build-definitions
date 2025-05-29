@@ -54,8 +54,8 @@ spec:
         set -euo pipefail
         # shellcheck source=/dev/null
         
-        opm version >/var/workdir/run-opm-command-test.txt
-        ls >/var/workdir/run-opm-command-test.txt
+        opm version >/var/workdir/source/run-opm-command-test.txt
+        ls >/var/workdir/source/run-opm-command-test.txt
       computeResources:
         limits:
           memory: 2Gi
