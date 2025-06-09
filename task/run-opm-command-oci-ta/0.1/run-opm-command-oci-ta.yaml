@@ -74,7 +74,7 @@ spec:
           fi
 
           # Execute opm, redirecting stdout and stderr to the chosen file while also showing it in logs
-          opm "$@" 2>&1 | tee "${OUTPUT_FILE}"
+          opm "$@" > "${OUTPUT_FILE}"
 
           echo "--- OPM command finished ---"
         - "opm" # This becomes $0 for the script
