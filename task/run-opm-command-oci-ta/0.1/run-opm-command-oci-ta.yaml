@@ -53,17 +53,21 @@ spec:
         - |
           set -euo pipefail
           echo "--- Switching dir to source ---"
-          cd source
+          
+          pwd >> "/var/workdir/source/debug-output.txt"
+          ls >>  "/var/workdir/source/debug-output.txt"
 
-          echo "--- Running OPM command with user arguments ---"
-          echo "OPM Arguments received by script:"
-          for i in "$@"; do 
-            echo "  Arg: '$i'"
-          done
-
-          opm "$@" 2>&1 | tee "/var/workdir/source/opm-command-output.txt"
-
-          echo "--- OPM command finished ---"
+#          cd source
+#
+#          echo "--- Running OPM command with user arguments ---"
+#          echo "OPM Arguments received by script:"
+#          for i in "$@"; do
+#            echo "  Arg: '$i'"
+#          done
+#
+#          opm "$@" 2>&1 | tee "/var/workdir/source/opm-command-output.txt"
+#
+#          echo "--- OPM command finished ---"
 
         - "opm"
         - "$(params.OPM_ARGS[*])"
