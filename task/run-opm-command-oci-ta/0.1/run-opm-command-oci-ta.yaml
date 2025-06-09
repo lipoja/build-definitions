@@ -52,6 +52,8 @@ spec:
       args:
         - |
           set -euo pipefail
+          echo "--- Switching dir to source ---"
+          cd source
 
           echo "--- Running OPM command with user arguments ---"
           echo "OPM Arguments received by script:"
