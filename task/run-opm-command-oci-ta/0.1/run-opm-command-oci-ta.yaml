@@ -39,6 +39,7 @@ spec:
         - $(params.SOURCE_ARTIFACT)=/var/workdir/source
     - name: run-opm-command
       image: registry.redhat.io/openshift4/ose-operator-registry-rhel9:v4.18
+      workingDir: /var/workdir/source
       env:
         - name: SOURCE_CODE_DIR
           value: /var/workdir
