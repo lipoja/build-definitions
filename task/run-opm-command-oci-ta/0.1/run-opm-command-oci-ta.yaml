@@ -21,7 +21,7 @@ spec:
       description: "The array of arguments to pass to the 'opm' command (e.g., ['index', 'add', '--bundles', 'example.com/my-bundle:1.0.0'])."
       type: array
     - name: OPM_OUTPUT_PATH
-      description: "Optional. If specified, redirects the 'opm' command's standard output to this file path within the source directory."
+      description: "Optional, relative path for the opm command's output file within the source directory."
       type: string
       default: ""
   results:
@@ -45,35 +45,47 @@ spec:
       image: registry.redhat.io/openshift4/ose-operator-registry-rhel9:v4.18
       workingDir: /var/workdir/source
       env:
-        - name: SOURCE_CODE_DIR
-          value: /var/workdir
         - name: OPM_OUTPUT_PATH_PARAM
           value: $(params.OPM_OUTPUT_PATH)
-      volumeMounts:
-        - mountPath: /var/workdir
-          name: workdir
       securityContext:
         runAsUser: 0
       command: ["/bin/bash", "-c"]
       args:
         - |
           set -euo pipefail
-          echo "--- Running OPM command with user arguments ---"
+
+          echo "--- Running OPM command in working directory: $(pwd) ---"
           echo "OPM Arguments received by script:"
           for i in "$@"; do 
             echo "  Arg: '$i'"
           done
 
-          # Conditionally set the output file path
+          # Set a default value for the output path
+          FINAL_OUTPUT_PATH="opm-command-output.txt"
+
           if [[ -n "${OPM_OUTPUT_PATH_PARAM}" ]]; then
-            OUTPUT_FILE="/var/workdir/source/${OPM_OUTPUT_PATH_PARAM}"
-            echo "Redirecting OPM output to: ${OUTPUT_FILE}"
-          else
-            OUTPUT_FILE="/var/workdir/source/opm-command-output.txt"
-            echo "Logging OPM output to default file: ${OUTPUT_FILE}"
+            # 1. Validate that the path is not absolute
+            if [[ "${OPM_OUTPUT_PATH_PARAM}" == /* ]]; then
+              echo "Error: OPM_OUTPUT_PATH must be a relative path, but got '${OPM_OUTPUT_PATH_PARAM}'."
+              exit 1
+            fi
+            
+            FINAL_OUTPUT_PATH="${OPM_OUTPUT_PATH_PARAM}"
+
+            # 2. Get the directory part of the path
+            OUTPUT_DIR=$(dirname "${FINAL_OUTPUT_PATH}")
+
+            # 3. Create the directory if it's not the current directory '.'
+            if [[ "${OUTPUT_DIR}" != "." ]]; then
+              echo "Ensuring directory '${OUTPUT_DIR}' exists."
+              mkdir -p "${OUTPUT_DIR}"
+            fi
           fi
 
-          opm "$@" > "${OUTPUT_FILE}"
+          echo "Writing OPM output to file: $(pwd)/${FINAL_OUTPUT_PATH}"
+
+          # Execute the opm command and redirect its output
+          opm "$@" > "${FINAL_OUTPUT_PATH}"
 
           echo "--- OPM command finished ---"
         - "opm"
@@ -91,9 +103,6 @@ spec:
         - --store
         - $(params.ociStorage)
         - $(results.SOURCE_ARTIFACT.path)=/var/workdir/source
-      volumeMounts:
-        - mountPath: /var/workdir
-          name: workdir
       computeResources:
         limits:
           memory: 3Gi
