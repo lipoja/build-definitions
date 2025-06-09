@@ -3,7 +3,7 @@ kind: Task
 metadata:
   name: run-opm-command-oci-ta
   annotations:
-    tekton.dev/pipelines.minVersion: 0.12.1
+    tekton.dev/pipelines.minVersion: "0.12.1"
     tekton.dev/tags: konflux
   labels:
     app.kubernetes.io/version: "0.1"
@@ -20,6 +20,10 @@ spec:
     - name: OPM_ARGS
       description: "The array of arguments to pass to the 'opm' command (e.g., ['index', 'add', '--bundles', 'example.com/my-bundle:1.0.0'])."
       type: array
+    - name: OPM_OUTPUT_PATH
+      description: "Optional. If specified, redirects the 'opm' command's standard output to this file path within the source directory."
+      type: string
+      default: ""
   results:
     - name: SOURCE_ARTIFACT
       description: The Trusted Artifact URI pointing to the artifact with
@@ -42,12 +46,13 @@ spec:
       env:
         - name: SOURCE_CODE_DIR
           value: /var/workdir
+        - name: OPM_OUTPUT_PATH_PARAM
+          value: $(params.OPM_OUTPUT_PATH)
       volumeMounts:
         - mountPath: /var/workdir
           name: workdir
       securityContext:
         runAsUser: 0
-      # Let's use bash -c for running the script and safe argument passing
       command: ["/bin/bash", "-c"]
       args:
         - |
@@ -59,12 +64,21 @@ spec:
             echo "  Arg: '$i'"
           done
 
-          opm "$@" 2>&1 | tee "/var/workdir/source/opm-command-output.txt"
+          # Conditionally set the output file path
+          if [[ -n "${OPM_OUTPUT_PATH_PARAM}" ]]; then
+            OUTPUT_FILE="/var/workdir/source/${OPM_OUTPUT_PATH_PARAM}"
+            echo "Redirecting OPM output to: ${OUTPUT_FILE}"
+          else
+            OUTPUT_FILE="/var/workdir/source/opm-command-output.txt"
+            echo "Logging OPM output to default file: ${OUTPUT_FILE}"
+          fi
+
+          # Execute opm, redirecting stdout and stderr to the chosen file while also showing it in logs
+          opm "$@" 2>&1 | tee "${OUTPUT_FILE}"
 
           echo "--- OPM command finished ---"
-
-        - "opm"
-        - "$(params.OPM_ARGS[*])"
+        - "opm" # This becomes $0 for the script
+        - "$(params.OPM_ARGS[*])" # This expands to $1, $2, ... for the script
       computeResources:
         limits:
           memory: 2Gi
