@@ -20,6 +20,10 @@ spec:
     - name: OPM_ARGS
       description: "The array of arguments to pass to the 'opm' command (e.g., ['index', 'add', '--bundles', 'example.com/my-bundle:1.0.0'])."
       type: array
+    - name: OPM_OUTPUT_PATH
+      description: "Optional. If specified, redirects the 'opm' command's standard output to this file path within the source directory."
+      type: string
+      default: ""
   results:
     - name: SOURCE_ARTIFACT
       description: The Trusted Artifact URI pointing to the artifact with
@@ -43,33 +47,35 @@ spec:
       env:
         - name: SOURCE_CODE_DIR
           value: /var/workdir
+        - name: OPM_OUTPUT_PATH_PARAM
+          value: $(params.OPM_OUTPUT_PATH)
       volumeMounts:
         - mountPath: /var/workdir
           name: workdir
       securityContext:
         runAsUser: 0
-      # Let's use bash -c for running the script and safe argument passing
       command: ["/bin/bash", "-c"]
       args:
         - |
           set -euo pipefail
-          echo "--- Switching dir to source ---"
-          
-          pwd >> "/var/workdir/source/debug-output.txt"
-          ls >>  "/var/workdir/source/debug-output.txt"
+          echo "--- Running OPM command with user arguments ---"
+          echo "OPM Arguments received by script:"
+          for i in "$@"; do 
+            echo "  Arg: '$i'"
+          done
 
-#          cd source
-#
-#          echo "--- Running OPM command with user arguments ---"
-#          echo "OPM Arguments received by script:"
-#          for i in "$@"; do
-#            echo "  Arg: '$i'"
-#          done
-#
-#          opm "$@" 2>&1 | tee "/var/workdir/source/opm-command-output.txt"
-#
-#          echo "--- OPM command finished ---"
+          # Conditionally set the output file path
+          if [[ -n "${OPM_OUTPUT_PATH_PARAM}" ]]; then
+            OUTPUT_FILE="/var/workdir/source/${OPM_OUTPUT_PATH_PARAM}"
+            echo "Redirecting OPM output to: ${OUTPUT_FILE}"
+          else
+            OUTPUT_FILE="/var/workdir/source/opm-command-output.txt"
+            echo "Logging OPM output to default file: ${OUTPUT_FILE}"
+          fi
 
+          opm "$@" > "${OUTPUT_FILE}"
+
+          echo "--- OPM command finished ---"
         - "opm"
         - "$(params.OPM_ARGS[*])"
       computeResources:
