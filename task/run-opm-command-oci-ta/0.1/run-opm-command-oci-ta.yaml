@@ -98,7 +98,7 @@ spec:
           cpu: 500m
           memory: 2Gi
     - name: replace-related-images-pullspec-in-catalog
-      image: quay.io/konflux-ci/konflux-test@sha256:3619ffde751d337d02f1f61c83c5c39eb87d8091dbe5a9af58ea98577fa09461
+      image: quay.io/redhat-appstudio/konflux-test:v1.4.29@sha256:3619ffde751d337d02f1f61c83c5c39eb87d8091dbe5a9af58ea98577fa09461
       workingDir: /var/workdir/source
       securityContext:
         runAsUser: 0
@@ -106,69 +106,97 @@ spec:
         - input: "$(params.IDMS_PATH)"
           operator: notin
           values: ["", "null"]
-      command: ["/bin/bash", "-c"]
+      command: ["bash", "-c"]
       args:
         - |
+          #!/bin/bash
           set -euo pipefail
+          # Source helper functions, assuming this file exists and works
+          source /utils.sh
 
-          IDMS_PATH="$1"
-          CATALOG_PATH="$2"
-
-          echo "Starting pullspec replacement using Bash and yq."
-          echo "ImageDigestMirrorSet path: ${IDMS_PATH}"
-          echo "Catalog file path: ${CATALOG_PATH}"
-
-          if [[ ! -f "${IDMS_PATH}" ]]; then
-            echo "Error: ImageDigestMirrorSet file not found at '${IDMS_PATH}'"
-            exit 1
-          fi
-          if [[ ! -f "${CATALOG_PATH}" ]]; then
-            echo "Error: Catalog file not found at '${CATALOG_PATH}'"
-            exit 1
+          # --- Validate input arguments ---
+          if [[ $# -ne 2 ]]; then
+              echo "Error: The script requires 2 arguments: <path_to_idms_file> <path_to_catalog_file>" >&2
+              exit 1
           fi
 
-          TMP_CATALOG=$(mktemp)
-          cp "${CATALOG_PATH}" "${TMP_CATALOG}"
+          IDMS_FILE=$1
+          CATALOG_FILE=$2
 
-          echo "Parsing ImageDigestMirrorSet to create a mirror map..."
-          
-          declare -A mirror_map
-          
-          # FIX 1: Added -r (--raw-output) to prevent yq from adding quotes to the output strings.
-          map_data=$(yq -r '.spec.imageDigestMirrors[] | .source + " " + .mirrors[0]' "${IDMS_PATH}")
+          # --- Check file existence ---
+          if [[ ! -f "$CATALOG_FILE" ]]; then
+              echo "Error: Catalog file not found at: ${CATALOG_FILE}" >&2
+              exit 1
+          fi
 
-          if [[ -z "${map_data}" ]]; then
-            echo "Warning: No imageDigestMirrors found in ${IDMS_PATH}. Nothing to do."
+          # --- Create temporary files ---
+          # Using mktemp for safe temporary file creation
+          IMDS_MAP_TMP_FILE="$(mktemp)"
+          INPUT_CATALOG_FILE="$(mktemp)"
+          CATALOG_OUTPUT_TMP_FILE="$(mktemp)"
+
+          # Register a trap function to clean up temporary files on script exit (even on error)
+          trap 'rm -f "$IMDS_MAP_TMP_FILE" "$INPUT_CATALOG_FILE" "$CATALOG_OUTPUT_TMP_FILE"' EXIT
+
+          # Create a working copy of the catalog to avoid modifying the original while reading
+          cp "$CATALOG_FILE" "$INPUT_CATALOG_FILE"
+
+          # --- Process mirror mapping ---
+          if [[ -f "${IDMS_FILE}" ]]; then
+            echo "Processing ImageDigestMirrorSet from ${IDMS_FILE}..."
+            mirror_set_yaml=$(cat "${IDMS_FILE}")
+            process_image_digest_mirror_set "${mirror_set_yaml}" > "$IMDS_MAP_TMP_FILE"
+
+            # KEY CHECK: Verify that the generated file is valid JSON and not empty.
+            if ! jq -e . "$IMDS_MAP_TMP_FILE" > /dev/null 2>&1; then
+              echo "Error: The 'process_image_digest_mirror_set' function did not generate valid JSON." >&2
+              echo "Content of the generated file:" >&2
+              cat "$IMDS_MAP_TMP_FILE" >&2
+              exit 1 # Exiting the script with an error
+            fi
+            echo "ImageDigestMirrorSet was processed successfully."
+          else
+            echo "ImageDigestMirrorSet file not found at: ${IDMS_FILE}."
+            echo "Skipping replacement."
             exit 0
           fi
-          
-          while read -r source mirror; do
-              mirror_map["$source"]="$mirror"
-          done <<< "$map_data"
 
-          # FIX 2: Dynamically determine the output format flag based on file extension.
-          output_format_flag=""
-          if [[ "${CATALOG_PATH}" == *.json ]]; then
-            echo "Detected JSON catalog file. Using JSON output format flag (-j)."
-            output_format_flag="-j"
-          else
-            echo "Detected YAML catalog file (or unknown). Defaulting to YAML output format flag (-y)."
-            output_format_flag="-y"
-          fi
+          MAPPING_JSON_CONTENT=$(cat "$IMDS_MAP_TMP_FILE")
 
-          echo "Applying mirror replacements to the catalog file..."
-          for source in "${!mirror_map[@]}"; do
-            mirror="${mirror_map[$source]}"
-            echo "  - Replacing prefix '${source}' with '${mirror}'"
+          echo "Replacing values in relatedImages..."
+          # --- Robust and safe replacement using jq ---
+          jq --argjson mapping "$MAPPING_JSON_CONTENT" '
+            # Prepare mapping data
+            ($mapping // {}) as $safe_mapping |
+            ($safe_mapping | keys_unsorted | sort_by(length) | reverse) as $sorted_sources |
 
-            # The yq command now includes the required output format flag for in-place editing.
-            yq -i "${output_format_flag}" '(.. | select(has("relatedImages"))) .relatedImages[].image |= (select(startswith("'"$source"'")) | sub("'"$source"'"; "'"$mirror"'"))' "${TMP_CATALOG}"
-          done
+            # KLÍČOVÁ ZMĚNA: Zpracuj .relatedImages, pouze pokud existuje a je to pole.
+            if has("relatedImages") and (.relatedImages | type == "array") then
+              .relatedImages |= map(
+                  . as $img |
+                  reduce $sorted_sources[] as $source (
+                      $img;
+                      # Check that the value is an array and has at least one element
+                      if ($safe_mapping[$source] | type) == "array" and ($safe_mapping[$source] | length > 0) then
+                        .image |= sub($source; $safe_mapping[$source][0])
+                      else
+                        .
+                      end
+                  )
+              )
+            else
+              # Pokud .relatedImages neexistuje nebo není pole, vrať původní dokument beze změny.
+              .
+            end
+          ' < "$INPUT_CATALOG_FILE" > "$CATALOG_OUTPUT_TMP_FILE"
 
-          mv "${TMP_CATALOG}" "${CATALOG_PATH}"
+          # --- Finalization ---
+          # ONLY AFTER JQ SUCCEEDS, MOVE THE RESULT TO OVERWRITE THE ORIGINAL FILE
+          mv "$CATALOG_OUTPUT_TMP_FILE" "$CATALOG_FILE"
 
-          echo "Pullspec replacement finished successfully."
-        - "bash" # Script name for logging clarity
+          echo "Update of relatedImages in ${CATALOG_FILE} has been completed."
+          # Temporary files are cleaned up automatically by the 'trap' command at the beginning of the script.
+        - "bash"
         - "$(params.IDMS_PATH)"
         - "$(params.OPM_OUTPUT_PATH)"
       computeResources:
