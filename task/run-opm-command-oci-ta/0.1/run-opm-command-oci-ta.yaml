@@ -106,159 +106,69 @@ spec:
         - input: "$(params.IDMS_PATH)"
           operator: notin
           values: ["", "null"]
-      command: ["python3", "-c"]
+      command: ["/bin/bash", "-c"]
       args:
         - |
-          import json
-          import os
-          import sys
-          import re
-          import yaml
+          set -euo pipefail
 
-          def load_data_to_dict(file_path: str) -> tuple[list, str]:
-              """
-              Loads data from a specified file into a Python list of dictionaries.
+          IDMS_PATH="$1"
+          CATALOG_PATH="$2"
 
-              Args:
-                  file_path (str): The path to the data file (e.g., YAML or JSON).
+          echo "Starting pullspec replacement using Bash and yq."
+          echo "ImageDigestMirrorSet path: ${IDMS_PATH}"
+          echo "Catalog file path: ${CATALOG_PATH}"
 
-              Returns:
-                  list: A list containing the loaded data as dictionaries.
-                        Each element in the list corresponds to a document in the file
-                        (e.g., a single YAML document or a single JSON object,
-                        or multiple JSON objects if concatenated).
+          if [[ ! -f "${IDMS_PATH}" ]]; then
+            echo "Error: ImageDigestMirrorSet file not found at '${IDMS_PATH}'"
+            exit 1
+          fi
+          if [[ ! -f "${CATALOG_PATH}" ]]; then
+            echo "Error: Catalog file not found at '${CATALOG_PATH}'"
+            exit 1
+          fi
 
-              Raises:
-                  FileNotFoundError: If the specified file path does not exist.
-                  ValueError: If the file content cannot be successfully loaded as either
-                              YAML or JSON.
-              """
-              if not file_path:
-                  return [], ''
+          TMP_CATALOG=$(mktemp)
+          cp "${CATALOG_PATH}" "${TMP_CATALOG}"
 
-              if not os.path.exists(file_path):
-                  raise FileNotFoundError(f"File at path '{file_path}' was not found.")
+          echo "Parsing ImageDigestMirrorSet to create a mirror map..."
+          
+          declare -A mirror_map
+          
+          # FIX 1: Added -r (--raw-output) to prevent yq from adding quotes to the output strings.
+          map_data=$(yq -r '.spec.imageDigestMirrors[] | .source + " " + .mirrors[0]' "${IDMS_PATH}")
 
-              with open(file_path, 'r', encoding='utf-8') as f:
-                  try:
-                      data = list(yaml.safe_load_all(f))
-                      return [doc for doc in data if doc is not None], 'yaml'
-                  except yaml.YAMLError:
-                      f.seek(0)
-                      try:
-                          return [json.load(f)], 'json'
-                      except json.JSONDecodeError:
-                          f.seek(0)
-                          result = []
-                          for part in re.split(r'(?<=})\n(?={)', f.read()):
-                              try:
-                                  result.append(json.loads(part))
-                              except json.JSONDecodeError as e:
-                                  raise ValueError(
-                                      f"File content from '{file_path}' contains malformed JSON parts "
-                                      f"after initial JSON load attempt failed: {e}")
-                          return result, 'json'
-                      except Exception as e:
-                          raise ValueError(
-                              f"An unexpected error occurred during JSON loading from '{file_path}': {e}")
+          if [[ -z "${map_data}" ]]; then
+            echo "Warning: No imageDigestMirrors found in ${IDMS_PATH}. Nothing to do."
+            exit 0
+          fi
+          
+          while read -r source mirror; do
+              mirror_map["$source"]="$mirror"
+          done <<< "$map_data"
 
+          # FIX 2: Dynamically determine the output format flag based on file extension.
+          output_format_flag=""
+          if [[ "${CATALOG_PATH}" == *.json ]]; then
+            echo "Detected JSON catalog file. Using JSON output format flag (-j)."
+            output_format_flag="-j"
+          else
+            echo "Detected YAML catalog file (or unknown). Defaulting to YAML output format flag (-y)."
+            output_format_flag="-y"
+          fi
 
-          def parse_image_digest_mirror_set(imds_data: list) -> dict:
-              """
-              Parses a list of ImageDigestMirrorSet (IDMS) data to extract a mapping
-              of source image pull specifications to their mirror pull specifications.
+          echo "Applying mirror replacements to the catalog file..."
+          for source in "${!mirror_map[@]}"; do
+            mirror="${mirror_map[$source]}"
+            echo "  - Replacing prefix '${source}' with '${mirror}'"
 
-              Args:
-                  imds_data (list): A list of dictionaries, where each dictionary
-                                    represents an ImageDigestMirrorSet object.
-                                    Expected structure:
-                                    [{'spec': {'imageDigestMirrors': [{'source': '...', 'mirrors': ['...']}, ...]}}, ...]
+            # The yq command now includes the required output format flag for in-place editing.
+            yq -i "${output_format_flag}" '(.. | select(has("relatedImages"))) .relatedImages[].image |= (select(startswith("'"$source"'")) | sub("'"$source"'"; "'"$mirror"'"))' "${TMP_CATALOG}"
+          done
 
-              Returns:
-                  dict: A dictionary where keys are source image pull specifications
-                        (str) and values are lists of their corresponding mirror pull
-                        specifications (list of str). Returns an empty dictionary
-                        if no valid mirror sets are found or parsed.
-              """
-              result = {}
-              for imds in imds_data:
-                  if isinstance(imds, dict) and 'spec' in imds and 'imageDigestMirrors' in imds['spec']:
-                      for item in imds['spec']['imageDigestMirrors']:
-                          if 'source' in item and 'mirrors' in item:
-                              source_value = item['source']
-                              mirrors_list = item['mirrors']
-                              result[source_value] = mirrors_list
-                  else:
-                      print("Warning: Unexpected structure of an ImageDigestMirrorSet object "
-                            "(missing 'spec' or 'imageDigestMirrors'). Skipping this entry.")
-              return result
+          mv "${TMP_CATALOG}" "${CATALOG_PATH}"
 
-
-          def get_correct_pullspec(mirror_set: dict, image_pullspec: str) -> str:
-              """
-              Determines the correct image pull specification by checking if the given
-              `image_pullspec` starts with any of the `source_pullspec` keys in the
-              `mirror_set`. If a match is found, it replaces the source part with
-              the first mirror in the corresponding list.
-
-              Args:
-                  mirror_set (dict): A dictionary mapping source pull specifications
-                                     to lists of mirror pull specifications.
-                                     (e.g., {'quay.io/old/repo': ['registry.example.com/new/repo']})
-                  image_pullspec (str): The original image pull specification to check.
-
-              Returns:
-                  str: The corrected image pull specification if a mirror is found,
-                       otherwise the original `image_pullspec` unchanged.
-              """
-              for source_pullspec in mirror_set.keys():
-                  if image_pullspec.startswith(source_pullspec):
-                      a = image_pullspec.replace(source_pullspec, mirror_set[source_pullspec][0])
-                      return a
-              return image_pullspec
-
-
-          def replace_pullspec(mirror_set: dict, catalog_data: list) -> list:
-              """
-              Iterates through catalog data and updates the 'image' field within
-              'relatedImages' based on the provided mirror set.
-
-              Args:
-                  mirror_set (dict): A dictionary mapping source pull specifications
-                                     to lists of mirror pull specifications.
-                  catalog_data (list): A list of dictionaries representing catalog entries.
-                                       Expected structure:
-                                       [{'relatedImages': [{'image': '...', ...}, ...]}, ...]
-
-              Returns:
-                  list: The `catalog_data` list with updated image pull specifications.
-              """
-              for catalog in catalog_data:
-                  if 'relatedImages' in catalog:
-                      for item in catalog['relatedImages']:
-                          if 'image' in item:
-                              item['image'] = get_correct_pullspec(mirror_set, item['image'])
-              return catalog_data
-
-          catalog_path = sys.argv[2]
-          imds_data, _ = load_data_to_dict(sys.argv[1])
-          if not imds_data:
-              print("No ImageDigestMirrorSet data were set. Skipping pullspec replacement.")
-              sys.exit(0)
-
-          catalog_data, catalog_type = load_data_to_dict(catalog_path)
-
-          mirror_set = parse_image_digest_mirror_set(imds_data)
-          fixed_data = replace_pullspec(mirror_set, catalog_data)
-
-          with open(catalog_path, 'w', encoding='utf-8') as f:
-              if catalog_type == 'json':
-                  for d in fixed_data:
-                    f.write(json.dumps(d, ensure_ascii=False, indent=4))
-                    f.write('\n')
-              else:
-                  f.write(yaml.dump_all(fixed_data, allow_unicode=True, default_flow_style=False, sort_keys=False))
-                  f.write('\n')
+          echo "Pullspec replacement finished successfully."
+        - "bash" # Script name for logging clarity
         - "$(params.IDMS_PATH)"
         - "$(params.OPM_OUTPUT_PATH)"
       computeResources:
