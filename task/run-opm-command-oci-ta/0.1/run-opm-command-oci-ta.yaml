@@ -89,30 +89,6 @@ spec:
         - input: "$(steps.check-and-skip-if-needed.results.valid_params)"
           operator: in
           values: ["true"]
-    - name: replace-related-images-pullspec-in-catalog-template
-      image: quay.io/konflux-ci/konflux-test:v1.4.33@sha256:f1e256d52ec62f8927106659d65fc842e330d3cfed791775c1ef4fedf270dbc8
-      workingDir: /var/workdir/source
-      securityContext:
-        runAsUser: 0
-      env:
-        - name: IDMS_PATH
-          value: $(params.IDMS_PATH)
-        - name: OPM_OUTPUT_PATH
-          value: $(params.OPM_OUTPUT_PATH)
-      script: |
-        #!/bin/bash
-        set -euo pipefail
-
-        # shellcheck source=/dev/null
-        source /utils.sh
-
-        replace_mirror_pullspec_with_source "${IDMS_PATH}" "v4.13/catalog-template.json"
-      computeResources:
-        limits:
-          memory: 2Gi
-        requests:
-          cpu: 1
-          memory: 2Gi
     - name: run-opm-with-user-args
       image: quay.io/konflux-ci/operator-sdk-builder:latest@sha256:e7cfe742ef5be036478408e98094f49109474418521970f739a6c1ff6faa4267
       workingDir: /var/workdir/source
@@ -189,6 +165,40 @@ spec:
         requests:
           cpu: 1
           memory: 4Gi
+    - name: replace-related-images-pullspec-in-catalog
+      image: registry.redhat.io/openshift4/ose-operator-registry-rhel9:v4.18
+      workingDir: /var/workdir/source
+      securityContext:
+        runAsUser: 0
+      env:
+        - name: IDMS_PATH
+          value: $(params.IDMS_PATH)
+        - name: OPM_OUTPUT_PATH
+          value: $(params.OPM_OUTPUT_PATH)
+      when:
+        - input: "$(steps.run-opm-with-user-args.results.skip_replace)"
+          operator: in
+          values: ["false"]
+        - input: "$(steps.check-and-skip-if-needed.results.valid_params)"
+          operator: in
+          values: ["true"]
+        - input: "$(params.IDMS_PATH)"
+          operator: notin
+          values: ["", "null"]
+      script: |
+          #!/bin/bash
+          set -euo pipefail
+
+          # shellcheck source=/dev/null
+          source /utils.sh
+
+          replace_mirror_pullspec_with_source "${IDMS_PATH}" "${OPM_OUTPUT_PATH}"
+      computeResources:
+        limits:
+          memory: 2Gi
+        requests:
+          cpu: 1
+          memory: 2Gi
     - name: create-trusted-artifact
       image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:edd8e3affc389320b15b9de8a5aedbf7b0463211b77c981563a2cfa20076b0c0
       env:
