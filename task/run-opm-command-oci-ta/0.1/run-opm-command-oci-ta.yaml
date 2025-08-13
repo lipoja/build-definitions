@@ -136,8 +136,8 @@ spec:
           echo "OPM command finished."
 
           echo -n "false" > "$(step.results.skip_create_trusted_artifact.path)"
-    - "bash"
-    - $(params.OPM_ARGS[*])
+        - "bash"
+        - $(params.OPM_ARGS[*])
     - name: create-trusted-artifact
       image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:edd8e3affc389320b15b9de8a5aedbf7b0463211b77c981563a2cfa20076b0c0
       when:
