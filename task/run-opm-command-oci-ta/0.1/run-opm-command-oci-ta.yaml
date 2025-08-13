@@ -96,9 +96,7 @@ spec:
           value: $(params.SOURCE_ARTIFACT)
       securityContext:
         runAsUser: 0
-      command:
-        - "/bin/bash"
-        - "-c"
+      command: ["/bin/bash", "-c"]
       args:
         - |
           #!/bin/bash
@@ -110,9 +108,12 @@ spec:
           # Ensure OPM_OUTPUT_PATH_PARAM is provided
           if [[ $# -eq 0 || -z "${OPM_OUTPUT_PATH_PARAM}" ]]; then
             echo "Parameter 'OPM_ARGS' or 'OPM_OUTPUT_PATH' is empty. Skipping OPM execution."
-            echo -n "${SOURCE_ARTIFACT_PARAM}" > "$(results.SOURCE_ARTIFACT.path)"
-            echo -n "true" > "$(results.skip_create_trusted_artifact.path)"
-            exit 1
+
+            echo "Returning SOURCE_ARTIFACT from previous task."
+            echo -n "${SOURCE_ARTIFACT_PARAM}" | tee "$(results.SOURCE_ARTIFACT.path)"
+
+            echo -n "true" > "$(step.results.skip_create_trusted_artifact.path)"
+            exit 0
           fi
 
           # Validate that the path is not absolute
@@ -134,10 +135,9 @@ spec:
           opm "$@" > "${OPM_OUTPUT_PATH_PARAM}"
           echo "OPM command finished."
 
-          echo -n "false" > "$(results.skip_create_trusted_artifact.path)"
-        - "bash"
-        - $(params.OPM_ARGS[*])
-
+          echo -n "false" > "$(step.results.skip_create_trusted_artifact.path)"
+    - "bash"
+    - $(params.OPM_ARGS[*])
     - name: create-trusted-artifact
       image: quay.io/konflux-ci/build-trusted-artifacts:latest@sha256:edd8e3affc389320b15b9de8a5aedbf7b0463211b77c981563a2cfa20076b0c0
       when:
